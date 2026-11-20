@@ -64,6 +64,190 @@ Interactive API documentation is available through FastAPI's default documentati
 
 
 
+3.1 JWT Authentication
+
+
+
+The application uses JSON Web Tokens (JWT) for authentication.
+
+
+
+The login endpoint verifies the submitted password against the stored bcrypt password hash. Upon successful authentication, the API generates an access token.
+
+
+
+The JWT payload contains:
+
+
+
+Claim
+
+
+
+Description
+
+
+
+user\_id
+
+
+
+Authenticated user's database ID
+
+
+
+role
+
+
+
+User's assigned role
+
+
+
+iat
+
+
+
+Token issued-at timestamp
+
+
+
+exp
+
+
+
+Token expiration timestamp
+
+
+
+The token expiration duration is configured through JWT\_ACCESS\_TOKEN\_EXPIRE\_MINUTES.
+
+
+
+The token is signed using the configured JWT\_SECRET and JWT\_ALGORITHM.
+
+
+
+3.2 Bearer Token Validation
+
+
+
+Protected endpoints use FastAPI's HTTPBearer security scheme.
+
+
+
+Clients must provide:
+
+
+
+Authorization: Bearer YOUR\_ACCESS\_TOKEN
+
+
+
+The authentication dependency validates the token and its required claims.
+
+
+
+Authentication errors:
+
+
+
+Status
+
+
+
+Condition
+
+
+
+401
+
+
+
+Invalid or expired token
+
+
+
+401
+
+
+
+User account no longer exists
+
+
+
+3.3 Role Authorization
+
+
+
+The require\_role() dependency checks the authenticated user's database record and compares the assigned role with the required role.
+
+
+
+Supported roles:
+
+
+
+ADMIN
+
+
+
+MANAGER
+
+
+
+EMPLOYEE
+
+
+
+If the authenticated user does not have the required role, the API returns:
+
+
+
+{
+
+&#x20; "detail": "Insufficient permissions"
+
+}
+
+
+
+HTTP status: 403 Forbidden.
+
+
+
+3.4 Employee Account Linking
+
+
+
+The application also defines a require\_linked\_employee dependency.
+
+
+
+It checks whether the authenticated user has an associated employee record.
+
+
+
+If the account is not linked, the API returns:
+
+
+
+{
+
+&#x20; "detail": "Your account is not linked to an employee record"
+
+}
+
+
+
+HTTP status: 403 Forbidden.
+
+
+
+This dependency is available for routes requiring an employee association.
+
+
+
 Protected endpoints use the application's authentication dependencies.
 
 
@@ -145,6 +329,42 @@ The actual token validation and expiration configuration are defined in the appl
 
 
 \## 4. API Endpoints
+
+
+
+LoginRequest
+
+
+
+{
+
+&#x20; "username": "admin",
+
+&#x20; "password": "your-password"
+
+}
+
+
+
+Both fields are required strings.
+
+
+
+TokenResponse
+
+
+
+{
+
+&#x20; "access\_token": "JWT\_ACCESS\_TOKEN",
+
+&#x20; "token\_type": "bearer"
+
+}
+
+
+
+Both fields are strings.
 
 
 
@@ -686,6 +906,90 @@ Successful response:
 
 
 
+ConversationCreate
+
+
+
+{
+
+&#x20; "title": "HR Policy Questions"
+
+}
+
+
+
+The title field is optional and may be null.
+
+
+
+ConversationResponse
+
+
+
+{
+
+&#x20; "id": 1,
+
+&#x20; "user\_id": 1,
+
+&#x20; "title": "HR Policy Questions",
+
+&#x20; "created\_at": "2026-11-19T10:30:00",
+
+&#x20; "updated\_at": "2026-11-19T10:30:00"
+
+}
+
+
+
+The response contains the conversation ID, owning user ID, optional title, and timestamps.
+
+
+
+MessageCreate
+
+
+
+{
+
+&#x20; "role": "user",
+
+&#x20; "content": "What is the company leave policy?"
+
+}
+
+
+
+Both fields are strings. The conversation message endpoint only permits the user role for client-submitted messages.
+
+
+
+MessageResponse
+
+
+
+{
+
+&#x20; "id": 1,
+
+&#x20; "conversation\_id": 1,
+
+&#x20; "role": "user",
+
+&#x20; "content": "What is the company leave policy?"
+
+}
+
+
+
+The response contains the message ID, conversation ID, role, and content.
+
+
+
+
+
+
+
 The following permissions are explicitly enforced by the route dependencies:
 
 
@@ -869,6 +1173,170 @@ The following details require inspection of their respective implementation file
 
 
 For the latest API contract, use the running application's OpenAPI specification at `/openapi.json`.
+
+
+
+\## JWT Configuration
+
+
+
+The application uses JSON Web Tokens for stateless authentication.
+
+
+
+| Configuration | Value |
+
+|---|---|
+
+| Signing algorithm | HS256 |
+
+| Default access token lifetime | 30 minutes |
+
+| Secret source | Backend `.env` file |
+
+| Minimum secret length | 32 bytes |
+
+| Password hashing algorithm | bcrypt |
+
+
+
+The token expiration can be configured using:
+
+
+
+`JWT\_ACCESS\_TOKEN\_EXPIRE\_MINUTES`
+
+
+
+The signing secret is configured using:
+
+
+
+`JWT\_SECRET`
+
+
+
+The application currently supports only the HS256 signing algorithm. Startup validation rejects missing or insufficiently long secrets, unsupported algorithms, and non-positive token expiration values.
+
+
+
+\## RAG Response Contract
+
+
+
+The `POST /rag/ask` endpoint returns a JSON response containing:
+
+
+
+| Field | Type | Description |
+
+|---|---|---|
+
+| question | String | Submitted question |
+
+| answer | String | Generated answer |
+
+| sources | Array | Retrieved document source information |
+
+
+
+Each source object contains:
+
+
+
+| Field | Type | Description |
+
+|---|---|---|
+
+| source | String | Original document filename |
+
+| chunk\_index | Integer | Retrieved chunk index |
+
+| distance | Number | Retrieval distance |
+
+
+
+\### Example successful response
+
+
+
+```json
+
+{
+
+&#x20; "question": "What is the company leave policy?",
+
+&#x20; "answer": "Employees are entitled to the leave described in the company policy.",
+
+&#x20; "sources": \[
+
+&#x20;   {
+
+&#x20;     "source": "company-policy.pdf",
+
+&#x20;     "chunk\_index": 2,
+
+&#x20;     "distance": 0.32
+
+&#x20;   }
+
+&#x20; ]
+
+}
+
+```
+
+
+
+\### No relevant documents found
+
+
+
+When the retriever returns no documents, the API responds with:
+
+
+
+```json
+
+{
+
+&#x20; "question": "What is the company leave policy?",
+
+&#x20; "answer": "I don't have enough information in the knowledge base.",
+
+&#x20; "sources": \[]
+
+}
+
+```
+
+
+
+\### Retrieval configuration
+
+
+
+The RAG pipeline uses the following defaults:
+
+
+
+| Parameter | Value |
+
+|---|---|
+
+| Default top\_k | 3 |
+
+| Distance threshold | 0.75 |
+
+| Source filter | Optional |
+
+
+
+Retrieved document content is combined into a context string and passed to the answer-generation component.
+
+
+
+
 
 
 
